@@ -1,0 +1,72 @@
+#!/usr/bin/php-cli
+
+<?php
+// Variables
+$drupalUsername = '';
+$drupalPassword = '';
+$dbip = "";
+$dbport = "";
+$dbusername = "";
+$dbpassword = "";
+
+// ----------------------------------------
+
+// Required to fix print
+echo '<br />'; 
+
+// Setup opts array
+$opts = array();
+$argv0 = array_shift($argv);
+while(count($argv)) {
+	$key = array_shift($argv);
+	$value = array_shift($argv);
+	$opts[$key] = $value;
+}
+
+if ($opts['plan'] == 'drupal_autoinstall'){
+	// Setup user
+	$username = $opts['user'] . '_usr';
+	$dbname = $opts['user'] . '_db';
+	$pass = createPassword(8);
+
+	// Remove folder to prevent 
+	shell_exec('rm -r /home/' . $opts['user'] . '/public_html');
+
+	// Execute the drush make script
+	shell_exec('drush make /drupal.make /home/' . $opts['user'] . '/public_html');
+	
+	// Create the database
+	$con = mysql_connect($ip,$username,$password);
+	mysql_query("CREATE DATABASE ".$dbname."",$con)or die(mysql_error());
+	mysql_query("CREATE USER ".$username."@'' IDENTIFIED BY '".$pass."'",$con) or die(mysql_error());
+	mysql_query("GRANT ALL ON ".$dbname.".* to ".$username."@'localhost'",$con) or die(mysql_error());	
+	mysql_query("GRANT DROP ON ".$dbname.".* to ".$username."@'localhost'",$con) or die(mysql_error());  	
+	// Change our working directory
+	chdir('/home/'.$opts['user'].'/public_html');
+	
+	// Execute our drush install
+ 	shell_exec('drush site-install --db-url=mysql://'.$username.':'.$pass.'@localhost:3306/'.$dbname.' --account-name='.$drupalUsername.' --account-pass='.$drupalPassword.' -y');
+	
+	// Update permissions
+	shell_exec('chown -R '.$opts['user'].' *');
+	shell_exec('chgrp -R '.$opts['user'].' *');
+	
+	include("/drush_enable.php");
+
+	// Display our info to the user
+	echo 'Drupal Install...Done<br />';
+	echo 'MySQL Pass:'.$pass.'<br />';
+}
+
+function createPassword($length) {
+	$chars = "234567890abcdefghijkmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
+	$i = 0;
+	$password = "";
+	while ($i <= $length) {
+		$password .= $chars{mt_rand(0,strlen($chars))};
+		$i++;
+	}
+	return $password;
+}
+
+?>
